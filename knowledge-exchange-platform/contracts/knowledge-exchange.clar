@@ -272,3 +272,71 @@
     (ok true)
   )
 )
+
+;; Read-only functions
+(define-read-only (get-mentor-rating (mentor principal))
+  (match (map-get? mentors mentor)
+    mentor-data 
+      (if (> (get rating-count mentor-data) u0)
+        (/ (get rating-sum mentor-data) (get rating-count mentor-data))
+        u0
+      )
+    u0
+  )
+)
+
+(define-read-only (get-session-rating (session-id uint))
+  (match (map-get? sessions session-id)
+    session (get rating session)
+    u0
+  )
+)
+
+(define-read-only (get-mentor-rating-count (mentor principal))
+  (match (map-get? mentors mentor)
+    mentor-data (get rating-count mentor-data)
+    u0
+  )
+)
+
+(define-read-only (has-rated-session (session-id uint))
+  (match (map-get? sessions session-id)
+    session (> (get rating session) u0)
+    false
+  )
+)
+
+(define-read-only (calculate-mentor-success-rate (mentor principal))
+  (let
+    (
+      (mentor-data (unwrap! (map-get? mentors mentor) (ok u0)))
+      (total (get total-sessions mentor-data))
+      (rated (get rating-count mentor-data))
+    )
+    (if (> total u0)
+      (ok (/ (* rated u100) total))
+      (ok u0)
+    )
+  )
+)
+
+;; Public functions
+(define-public (rate-session (session-id uint) (rating uint))
+  (let
+    (
+      (session (unwrap! (map-get? sessions session-id) err-not-found))
+      (mentor-data (unwrap! (map-get? mentors (get mentor session)) err-not-found))
+    )
+    (asserts! (is-eq tx-sender (get student session)) err-unauthorized)
+    (asserts! (get completed session) err-unauthorized)
+    (asserts! (and (>= rating u1) (<= rating u5)) err-invalid-rating)
+    (map-set sessions session-id (merge session { rating: rating }))
+    (map-set mentors (get mentor session)
+      (merge mentor-data {
+        rating-sum: (+ (get rating-sum mentor-data) rating),
+        rating-count: (+ (get rating-count mentor-data) u1)
+      })
+    )
+    (ok true)
+  )
+)
