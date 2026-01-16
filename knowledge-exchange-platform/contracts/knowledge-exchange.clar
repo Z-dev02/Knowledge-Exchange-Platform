@@ -160,3 +160,115 @@
     (ok true)
   )
 )
+
+;; Read-only functions
+(define-read-only (get-session (session-id uint))
+  (map-get? sessions session-id)
+)
+
+(define-read-only (get-session-mentor (session-id uint))
+  (match (map-get? sessions session-id)
+    session (some (get mentor session))
+    none
+  )
+)
+
+(define-read-only (get-session-student (session-id uint))
+  (match (map-get? sessions session-id)
+    session (some (get student session))
+    none
+  )
+)
+
+(define-read-only (is-session-completed (session-id uint))
+  (match (map-get? sessions session-id)
+    session (get completed session)
+    false
+  )
+)
+
+(define-read-only (get-session-topic (session-id uint))
+  (match (map-get? sessions session-id)
+    session (some (get topic session))
+    none
+  )
+)
+
+(define-read-only (get-session-scheduled-time (session-id uint))
+  (match (map-get? sessions session-id)
+    session (some (get scheduled-time session))
+    none
+  )
+)
+
+;; Public functions
+;; #[allow(unchecked_data)]
+(define-public (schedule-session (mentor principal) (topic (string-ascii 100)) (scheduled-time uint))
+  (let
+    (
+      (session-id (var-get session-nonce))
+      (student tx-sender)
+      (mentor-data (unwrap! (map-get? mentors mentor) err-not-found))
+      (student-data (unwrap! (map-get? students student) err-not-found))
+    )
+    (asserts! (get active mentor-data) err-unauthorized)
+    (map-set sessions session-id
+      {
+        mentor: mentor,
+        student: student,
+        topic: topic,
+        scheduled-time: scheduled-time,
+        completed: false,
+        rating: u0
+      }
+    )
+    (var-set session-nonce (+ session-id u1))
+    (ok session-id)
+  )
+)
+
+;; #[allow(unchecked_data)]
+(define-public (reschedule-session (session-id uint) (new-time uint))
+  (let
+    (
+      (session (unwrap! (map-get? sessions session-id) err-not-found))
+    )
+    (asserts! (or (is-eq tx-sender (get mentor session)) 
+                  (is-eq tx-sender (get student session))) err-unauthorized)
+    (asserts! (not (get completed session)) err-unauthorized)
+    (map-set sessions session-id (merge session { scheduled-time: new-time }))
+    (ok true)
+  )
+)
+
+(define-public (cancel-session (session-id uint))
+  (let
+    (
+      (session (unwrap! (map-get? sessions session-id) err-not-found))
+    )
+    (asserts! (or (is-eq tx-sender (get mentor session)) 
+                  (is-eq tx-sender (get student session))) err-unauthorized)
+    (asserts! (not (get completed session)) err-unauthorized)
+    (map-delete sessions session-id)
+    (ok true)
+  )
+)
+
+(define-public (complete-session (session-id uint))
+  (let
+    (
+      (session (unwrap! (map-get? sessions session-id) err-not-found))
+      (mentor-data (unwrap! (map-get? mentors (get mentor session)) err-not-found))
+      (student-data (unwrap! (map-get? students (get student session)) err-not-found))
+    )
+    (asserts! (is-eq tx-sender (get mentor session)) err-unauthorized)
+    (map-set sessions session-id (merge session { completed: true }))
+    (map-set mentors (get mentor session)
+      (merge mentor-data { total-sessions: (+ (get total-sessions mentor-data) u1) })
+    )
+    (map-set students (get student session)
+      (merge student-data { sessions-attended: (+ (get sessions-attended student-data) u1) })
+    )
+    (ok true)
+  )
+)
