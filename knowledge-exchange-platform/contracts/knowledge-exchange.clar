@@ -340,3 +340,43 @@
     (ok true)
   )
 )
+
+;; Read-only functions
+(define-read-only (get-mentor-total-sessions (mentor principal))
+  (match (map-get? mentors mentor)
+    mentor-data (get total-sessions mentor-data)
+    u0
+  )
+)
+
+(define-read-only (get-student-total-sessions (student principal))
+  (match (map-get? students student)
+    student-data (get sessions-attended student-data)
+    u0
+  )
+)
+
+(define-read-only (get-mentor-expertise (mentor principal))
+  (match (map-get? mentors mentor)
+    mentor-data (some (get expertise mentor-data))
+    none
+  )
+)
+
+(define-read-only (get-student-interests (student principal))
+  (match (map-get? students student)
+    student-data (some (get interests student-data))
+    none
+  )
+)
+
+;; Public functions
+(define-public (verify-mentor-credentials (mentor principal))
+  (let
+    (
+      (mentor-data (unwrap! (map-get? mentors mentor) err-not-found))
+    )
+    (asserts! (is-eq tx-sender contract-owner) err-unauthorized)
+    (ok (get expertise mentor-data))
+  )
+)
